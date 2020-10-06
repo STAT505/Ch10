@@ -1,0 +1,45 @@
+---
+title: "Interaction Activity"
+output: pdf_document
+---
+
+#### Computational Lab
+
+The purpose of this activity is to better understand an interaction model.
+
+1. Simulate fake data that has an interaction.
+```{r, include = F}
+library(tidyverse)
+library(rstanarm)
+```
+
+
+```{r}
+n <- 100
+fake_data <- tibble( x_binary = rbinom(n, 1, .5), 
+             x_continuous = runif(100, -1, 1))
+
+beta <- c(1, 2, 1, -2)
+sigma <- .5
+
+fake_data <- fake_data %>% 
+  mutate(y =  rnorm(n, mean = beta[1] + x_binary * 
+                      beta[2] + x_continuous * beta[3] + x_continuous * x_binary * beta[4], 
+        sd = sigma)) %>% mutate(x_binary =factor(x_binary))
+```
+
+
+2. Visualize the interaction.
+
+```{r}
+fake_data %>% ggplot(aes(y=y, x=x_continuous, color = x_binary)) + geom_point() + geom_smooth(method = 'lm', se=F) +
+  theme_minimal()
+```
+
+
+3. Fit interaction model.
+
+```{r}
+stan_glm(y ~ x_binary * x_continuous, data = fake_data, refresh = 0)
+```
+

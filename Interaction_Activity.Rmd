@@ -1,0 +1,15 @@
+---
+title: "CH 10.1 - 10.6: Multiple Predictors"
+output: pdf_document
+---
+
+#### Computational Lab
+
+The purpose of this activity is to better understand an interaction model.
+
+1. Simulate fake data that has an interaction.
+
+2. Visualize the interaction.
+
+3. Fit interaction model.
+
