@@ -1,0 +1,272 @@
+---
+title: "CH 10.1 - 10.6: Multiple Predictors"
+output: pdf_document
+---
+
+\renewcommand{\vec}[1]{\mathbf{#1}}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 3, fig.width = 5, fig.align = 'center')
+library(tidyverse) 
+library(gridExtra)
+library(rstanarm)
+library(arm)
+set.seed(10052020)
+```
+
+### Regression with Multiple Predictors
+
+```{r, echo = F, message = F}
+beer <- read_csv('http://math.montana.edu/ahoegh/Data/Brazil_cerveja.csv')
+```
+
+#### Binary Predictor
+
+With a single binary predictor, using the beer dataset, the model can be written as
+
+$$y = \beta_0 + \beta_1 x_{weekend = 1} + \epsilon,$$
+where:
+
+- $y$ is the beer consumption, 
+\vfill
+
+- $\beta_0$ is the consumption on a weekday, 
+\vfill
+
+- $\beta_1$ is the difference in consumption between a weekend day and a weekend,  
+\vfill
+
+- $x_{weekend = 1}$ is an indicator function for whether the observation is a weekend. 
+
+\vfill
+
+*This is known as the reference case parameterization.*
+
+\vfill
+```{r}
+stan_glm(consumed ~ weekend, data = beer, refresh = 0)
+```
+
+\vfill
+
+\newpage
+
+Alternatively, the cell means model can be constructed, where
+
+$$y = \beta_1 x_{weekend = 0} + \beta_2 x_{weekend = 1} + \epsilon,$$
+in this case 
+
+- $\beta_1$ is the mean consumption on a weekday \vfill
+- $\beta_2$ is the mean consumption on a weekend. \vfill
+
+
+\vfill
+
+```{r}
+beer <- beer %>% mutate(weekend = factor(weekend))
+stan_cm <- stan_glm(consumed ~ weekend - 1, data = beer, refresh = 0)
+stan_cm
+```
+
+\vfill
+*There is not a direct contrast in the model specification, but that can easily be computed (especially using simulation).*
+\vfill
+```{r}
+as.data.frame(stan_cm) %>% mutate(contrast = weekend1 - weekend0) %>%
+  summarise(median_diff = median(contrast), lower_interval = quantile(contrast, probs = .025), 
+            upper_interval = quantile(contrast, probs = .975))
+```
+
+
+\newpage
+#### Binary Predictor + Continuous Predictor
+
+Now consider jointly considering both weekend/weekday and maximum temperature. The model can now be written as
+
+$$y = \beta_0 + \beta_1 x_{weekend = 1} + \beta_2 x_{tmp} + \epsilon,$$
+where:
+
+- $y$ is the beer consumption, 
+\vfill
+
+- $\beta_0$ *is the consumption on a weekday with maximum temperature of 0*
+
+\vfill
+
+- $\beta_1$ *is the expected difference in consumption between a weekend day and a weekend, holding maximum temperature constant* 
+\vfill
+
+- $\beta_2$ *is the expected difference in consumption for a 1 degree change in maximum temperature, holding the day of week constant.*
+
+\vfill
+
+```{r}
+ml_regression <- beer %>% stan_glm(consumed ~ weekend + max_tmp, data = ., refresh = 0)
+ml_regression
+```
+
+\newpage
+
+#### Coefficient Interpretation
+
+- When interpreting coefficients in a multiple regression model, it is important to understand that these values control for other predictors in the model! *The values will change with the inclusion/exclusion of other predictors.*
+
+\vfill
+
+- Sometimes we cannot necessarily hold all other predictors constant in a model. _A simple example would be $y = \beta_0 + \beta_1 x + \beta_2 x^2 + \epsilon$_
+
+\vfill
+
+The textbook puts an emphasis on differentiating predictive and counterfactual interpretations:
+
+- The predictive interpretation focuses on how the outcome differs, on average, when _comparing_ two groups of items that differ by 1 unit (and all other predictors are the same). *The coefficient is the expected difference in y between these two items.*
+
+\vfill
+- The counterfactual interpretation focuses on how the outcome would differ with an individual, rather than between individuals. *The coefficient is the expected change in y caused by adding one to the predictor (holding all other predictors the same)*
+
+\vfill
+
+The counterfactual interpretation should be reserved for a situation where causal inferences are reasonable, such as a completely randomized experimental design.
+
+\vfill
+
+It is easy to get careless with wording and say things like "a change in temperature is associated with a change in consumption," but *the safest interpretation focuses on comparisons between units rather than changes within units.*
+
+\vfill
+
+\newpage
+
+#### Interaction
+
+The model what we have fit, results in two parallel lines.
+```{r, fig.width = 6, fig.height = 4}
+beer %>% ggplot(aes(y = consumed, x = max_tmp, color = weekend)) +
+  geom_point() + 
+  geom_abline(intercept = as.numeric(ml_regression$coefficients[1]),
+              slope = as.numeric(ml_regression$coefficients[3]), color = "#E69F00") + 
+    geom_abline(intercept = as.numeric(ml_regression$coefficients[1] + ml_regression$coefficients[2]),
+              slope = as.numeric(ml_regression$coefficients[3]), color = "#56B4E9") + 
+  scale_color_manual(values = c("#E69F00", "#56B4E9")) +
+  theme_minimal() + 
+  xlab("Maximum Temperature (C)") + 
+  ylab("Liters of Beer Consumed") + 
+  ggtitle('Beer consumption in Sao Paolo, Bazil') +
+  labs(caption = 'Lines represent model fit without interaction')
+```
+
+In this situation, the assumption of an additive model (parallel lines) seems reasonable. However, in many situations we'd expect that the relationship between a continuous covariate (e.g. an extra degree of maximum temperature) could depend upon another covariate (e.g. day of week). 
+
+\vfill
+
+With our data, an interaction would mean that the two lines _are not_ parallel.
+
+\vfill
+
+The next figure allows some flexibility to fit non-parallel (and non-linear) functional relationships.
+
+
+```{r, eval = F}
+beer %>% ggplot(aes(y = consumed, x = max_tmp, color = weekend)) + geom_point() + geom_smooth(formula ='y~x', method = 'loess', se = F) + 
+  scale_color_manual(values = c("#E69F00", "#56B4E9")) + 
+    theme_minimal() + 
+  xlab("Maximum Temperature (C)") + 
+  ylab("Liters of Beer Consumed") + 
+  ggtitle('Beer consumption in Sao Paolo, Bazil') +
+  labs(caption = 'Lines represent loess fit')
+```
+\vfill
+\newpage
+
+```{r, eval = T, echo = F,  fig.width = 6, fig.height = 4}
+beer %>% ggplot(aes(y = consumed, x = max_tmp, color = weekend)) + geom_point() + geom_smooth(formula ='y~x', method = 'loess', se = F) + 
+  scale_color_manual(values = c("#E69F00", "#56B4E9")) + 
+  theme_minimal() + 
+  xlab("Maximum Temperature (C)") + 
+  ylab("Liters of Beer Consumed") + 
+  ggtitle('Beer consumption in Sao Paolo, Bazil') +
+  labs(caption = 'Lines represent loess fit')
+```
+
+This figure doesn't suggest a non-additive relationship, but nevertheless, let's explore the interaction model.
+
+\vfill
+
+
+$$y = \beta_0 + \beta_1 x_{weekend = 1} + \beta_2 x_{tmp} + \beta_3 x_{weekend = 1} x_{tmp} +  \epsilon,$$
+
+- $\beta_0$ *is the consumption on a weekday with maximum temperature of 0*
+
+\vfill
+
+- $\beta_1$ *is the expected difference in consumption between a weekend day and a weekend, with maximum temperature equal to zero. So intercept for weekend is $\beta_0 + \beta_1$* 
+\vfill
+
+- $\beta_2$ *is the expected difference in consumption for a 1 degree change in maximum temperature for weekdays* 
+\vfill
+
+- $\beta_3$ *is the difference between the slope of maximum temperature for weekdays and weekends. Thus the slope for weekends is $\beta_2 + \beta_3$* 
+\vfill
+\newpage
+
+```{r}
+stan_glm(consumed ~ max_tmp * weekend, data = beer, refresh = 0)
+```
+
+\vfill
+Interaction coefficients are more easily interpreted when the the continuous variables are centered or standardized.
+
+\vfill
+
+R automatically creates indicator variables for categorical data (that are stored as factors). 
+
+\vfill
+
+```{r}
+model.matrix(consumed ~ weekend, data = beer) %>% head(3)
+model.matrix(consumed ~ weekend - 1, data = beer) %>% head(3)
+```
+
+\vfill
+
+To change the reference level, it is necessary to either directly specify the levels of the factor or reorder them (see `forcats`)
+```{r}
+beer %>% mutate(weekend_fact = factor(weekend, levels = c('1', '0'))) %>%
+  lm(consumed ~ weekend_fact, data = .) %>% display()
+```
+
+\vfill
+\newpage
+
+#### Computational Lab
+
+The purpose of this activity is to better understand an interaction model.
+
+1. Simulate fake data that has an interaction.
+```{r}
+n <- 100
+fake_data <- tibble( x_binary = rbinom(n, 1, .5), 
+             x_continuous = runif(100, -1, 1))
+
+beta <- c(1, 2, 1, -2)
+sigma <- .5
+
+fake_data <- fake_data %>% 
+  mutate(y =  rnorm(n, mean = beta[1] + x_binary * beta[2] + x_continuous * beta[3] + x_continuous * x_binary * beta[4], 
+        sd = sigma)) %>% mutate(x_binary =factor(x_binary))
+```
+
+
+2. Visualize the interaction.
+
+```{r}
+fake_data %>% ggplot(aes(y=y, x=x_continuous, color = x_binary)) + geom_point() + geom_smooth(method = 'lm', se=F) +
+  theme_minimal()
+```
+
+
+3. Fit interaction model.
+
+```{r}
+stan_glm(y ~ x_binary * x_continuous, data = fake_data, refresh = 0)
+```
+
